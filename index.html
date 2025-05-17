@@ -4,76 +4,128 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Text Autofill</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        select {
+            padding: 10px;
+            font-size: 16px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        .suggestion-box {
+            border: 1px solid #ccc;
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            min-height: 40px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            transition: all 0.2s ease;
+        }
+        .suggestion-box .suggestion {
+            background: #e0e0e0;
+            padding: 8px 12px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s ease;
+        }
+        .suggestion-box .suggestion:hover {
+            background: #d0d0d0;
+        }
+        #error {
+            color: red;
+            margin-top: 10px;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 flex items-center justify-center h-screen">
-    <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
-        <h1 class="text-2xl font-bold mb-4 text-center">Text Autofill</h1>
-        <textarea id="inputText" class="w-full p-2 border rounded mb-4" rows="4" placeholder="Start typing..."></textarea>
-        <div class="mb-4">
-            <label for="methodSelect" class="block text-sm font-medium text-gray-700">Suggestion Method:</label>
-            <select id="methodSelect" class="mt-1 block w-full p-2 border rounded">
-                <option value="subtlex">SUBTLEX-US</option>
-                <option value="transformer">Transformer (DistilGPT2)</option>
-                <option value="linear_regression">Linear Regression</option>
-                <option value="logistic_regression">Logistic Regression</option>
-                <option value="decision_tree">Decision Tree</option>
-                <option value="random_forest">Random Forest</option>
-                <option value="naive_bayes">Naive Bayes</option>
-                <option value="knn">K-Nearest Neighbors</option>
-                <option value="svm">Support Vector Machine</option>
-                <option value="gradient_boosting">Gradient Boosting</option>
-                <option value="kmeans">K-Means Clustering</option>
-                <option value="apriori">Apriori</option>
-                <option value="pca">PCA</option>
-                <option value="sift">SIFT (Simulated)</option>
-            </select>
-        </div>
-        <div id="suggestions" class="mt-2"></div>
+<body>
+    <div class="container">
+        <h2>Text Autofill</h2>
+        <select id="method">
+            <option value="SUBTLEX">SUBTLEX</option>
+            <option value="apriori">Apriori</option>
+            <option value="gradient_boosting_pair">Gradient Boosting</option>
+            <option value="random_forest_pair">Random Forest</option>
+            <option value="transformer">Transformer</option>
+        </select>
+        <input type="text" id="inputText" placeholder="Type here..." autocomplete="off">
+        <div class="suggestion-box" id="suggestions"></div>
+        <div id="error"></div>
     </div>
+
     <script>
-        const textarea = document.getElementById('inputText');
-        const methodSelect = document.getElementById('methodSelect');
-        const suggestionsDiv = document.getElementById('suggestions');
+        const inputText = document.getElementById('inputText');
+        const suggestionsBox = document.getElementById('suggestions');
+        const errorDiv = document.getElementById('error');
+        const methodSelect = document.getElementById('method');
 
-        textarea.addEventListener('input', async () => {
-            const text = textarea.value.trim();
-            const method = methodSelect.value;
-            if (!text) {
-                suggestionsDiv.innerHTML = '';
-                return;
-            }
-
-            const response = await fetch('/suggest', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text, method })
-            });
-            const data = await response.json();
-
-            suggestionsDiv.innerHTML = '';
-            if (data.suggestions.length > 0) {
-                suggestionsDiv.innerHTML = '<p class="font-semibold">Suggestions:</p>';
-                const ul = document.createElement('ul');
-                ul.className = 'list-disc pl-5';
-                data.suggestions.forEach(suggestion => {
-                    const li = document.createElement('li');
-                    li.textContent = suggestion;
-                    li.className = 'cursor-pointer hover:text-blue-500';
-                    li.onclick = () => {
-                        const words = textarea.value.trim().split(' ');
-                        if (textarea.value.endsWith(' ')) {
-                            textarea.value = textarea.value.trim() + ' ' + suggestion + ' ';
-                        } else {
-                            words[words.length - 1] = suggestion;
-                            textarea.value = words.join(' ') + ' ';
-                        }
-                        textarea.focus();
-                        suggestionsDiv.innerHTML = '';
-                    };
-                    ul.appendChild(li);
+        async function fetchSuggestions(text, method) {
+            suggestionsBox.innerHTML = '';
+            errorDiv.innerHTML = '';
+            try {
+                const response = await fetch('/suggest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, method })
                 });
-                suggestionsDiv.appendChild(ul);
+                const data = await response.json();
+                if (data.error) {
+                    errorDiv.textContent = 'Error: ' + data.error;
+                    return;
+                }
+                data.suggestions.forEach(suggestion => {
+                    const span = document.createElement('span');
+                    span.className = 'suggestion';
+                    span.textContent = suggestion;
+                    span.addEventListener('click', () => {
+                        const isCompleteWord = text.endsWith(' ');
+                        if (isCompleteWord) {
+                            inputText.value = text + suggestion + ' ';
+                        } else {
+                            const words = text.trim().split(' ');
+                            words[words.length - 1] = suggestion;
+                            inputText.value = words.join(' ') + ' ';
+                        }
+                        suggestionsBox.innerHTML = '';
+                        inputText.focus();
+                        fetchSuggestions(inputText.value, methodSelect.value);
+                    });
+                    suggestionsBox.appendChild(span);
+                });
+            } catch (error) {
+                errorDiv.textContent = 'Network error: ' + error.message;
+            }
+        }
+
+        inputText.addEventListener('input', () => {
+            fetchSuggestions(inputText.value, methodSelect.value);
+        });
+
+        inputText.addEventListener('keyup', (event) => {
+            if (event.key === ' ') {
+                fetchSuggestions(inputText.value, methodSelect.value);
             }
         });
     </script>
